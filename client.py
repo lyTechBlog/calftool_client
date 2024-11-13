@@ -17,8 +17,9 @@ def parse_arguments():
     parser.add_argument('--debug', action='store_true', help="Run in debug mode")
     args = parser.parse_args()
     
-    # Construct URI based on domain and debug mode
-    uri = f"ws://{args.domain}/calftoolws" if not args.debug else "ws://localhost:15010/calftoolws"
+    # Set domain based on debug mode
+    domain = "localhost:15010" if args.debug else "thefreeai.cn"
+    uri = f"ws://{domain}/calftoolws"
     log.info(f"Using URI: {uri}")
     
     return args, uri
