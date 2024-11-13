@@ -1,6 +1,5 @@
 #!/bin/bash
-
-# 脚本名称：install_python310_conda.sh
+# 脚本名称：setup_and_run.sh
 
 # 检查是否已经安装了conda
 if ! command -v conda &> /dev/null
@@ -17,24 +16,30 @@ else
     # 创建一个新的conda环境，并安装Python 3.10
     echo "Creating a new conda environment with Python 3.10..."
     conda create --name python310_env python=3.10 -y
-
-    # 检查环境是否创建成功
-    if [ $? -eq 0 ]; then
-        echo "Conda environment 'python310_env' created successfully."
-    else
+    if [ $? -ne 0 ]; then
         echo "Failed to create conda environment."
         exit 1
     fi
+    echo "Conda environment 'python310_env' created successfully."
 fi
 
 # 验证Python版本
 echo "Verifying Python version..."
-bash -c "conda run -n python310_env python --version"
+conda run -n python310_env --no-capture-output python3 --version
 
-# 如果需要，可以在这里添加其他包的安装命令
+# 判断是否传入-d参数
+DEBUG_MODE=""
+if [[ "$1" == "-d" ]]; then
+    DEBUG_MODE="-d"
+    echo "Running in debug mode."
+else
+    echo "Running in normal mode."
+fi
 
-# 脚本结束
-# 使用 conda run 确保在 python310_env 环境中运行 client.py
-bash -c "conda run -n python310_env python3 client.py >> run.log 2>&1 &"
-echo "Script finished."
-echo "test_mm 启动成功"
+# 启动client.py
+echo "Starting client.py..."
+bash -c "conda run -n python310_env --no-capture-output python3 client.py $DEBUG_MODE >> run.log 2>&1 &"
+
+# 启动 monitor.sh
+echo "Starting monitor.sh..."
+nohup bash -x monitor.sh > monitor.log 2>&1 &
