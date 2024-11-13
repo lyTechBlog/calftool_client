@@ -27,10 +27,10 @@ fi
 echo "Verifying Python version..."
 conda run -n python310_env --no-capture-output python3 --version
 
-# 判断是否传入-d参数
+# 判断是否传入--debug参数
 DEBUG_MODE=""
-if [[ "$1" == "-d" ]]; then
-    DEBUG_MODE="-d"
+if [[ "$1" == "--debug" ]]; then
+    DEBUG_MODE="--debug"
     echo "Running in debug mode."
 else
     echo "Running in normal mode."

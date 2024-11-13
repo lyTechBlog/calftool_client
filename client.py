@@ -15,8 +15,6 @@ from tools.log_module import log
 def parse_arguments():
     parser = argparse.ArgumentParser(description="WebSocket client script")
     parser.add_argument('--debug', action='store_true', help="Run in debug mode")
-    parser.add_argument('-d', '--domain', default="thefreeai.cn",
-                       help="Server domain (default: thefreeai.cn)")
     args = parser.parse_args()
     
     # Construct URI based on domain and debug mode
