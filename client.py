@@ -16,7 +16,6 @@ from PyQt6.QtCore import QEvent, Qt
 PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../')
 sys.path.append(f"{PROJECT_DIR}/src")
 from tools.log_module import log
-
 def parse_arguments():
     parser = argparse.ArgumentParser(description="WebSocket client script")
     parser.add_argument('--debug', action='store_true', help="Run in debug mode")
@@ -56,6 +55,13 @@ async def send_data(user_id="test", uri=None, window=None):
                     log.info(f"Received raw message: {message}")
                     data = json.loads(message)
                     
+                    # Add check for user verification failure
+                    if data["type"] == "error" and "Invalid user_id" in data.get("message", ""):
+                        log.error(f"User verification failed for user_id: {user_id}")
+                        window.showMessage("Error", "User ID is invalid")
+                        window.dialog.updateButtonState(True)  # Re-enable the input
+                        return "invalid_user_id"  # Exit completely without retrying
+                    
                     if data["type"] == "screen_shoot":
                         log.info(f"Processing screen_shoot request for user {user_id}")
                         
@@ -89,8 +95,8 @@ async def send_data(user_id="test", uri=None, window=None):
             log.error(f"Connection error for user {user_id}: {str(e)}")
             log.info(f"Connection error details: {type(e).__name__}: {str(e)}")
             window.showMessage("Error", f"Connection failed: {str(e)}")
-            log.info(f"Attempting to reconnect in 3 seconds...")
-            await asyncio.sleep(3)
+            log.info(f"Attempting to reconnect in 15 seconds...")
+            await asyncio.sleep(15)
             continue
         except Exception as e:
             log.error(f"Critical error for user {user_id}: {str(e)}")
@@ -255,12 +261,19 @@ if __name__ == "__main__":
         
         # 修改异步任务以处理对话框关闭后的状态
         async def main():
-            while not hasattr(dialog, 'user_id'):
-                await asyncio.sleep(0.1)
-                app.processEvents()
-            
-            # 连接成功后继续运行
-            await send_data(user_id=dialog.user_id, uri=uri, window=window)
+            while True:
+                while not hasattr(dialog, 'user_id'):
+                    await asyncio.sleep(0.1)
+                    app.processEvents()
+                
+                # 连接成功后继续运行
+                result = await send_data(user_id=dialog.user_id, uri=uri, window=window)
+                
+                # Check if the result indicates an invalid user_id
+                if result == "invalid_user_id":
+                    dialog.showError("Invalid user ID. Please try again.")
+                    dialog.updateButtonState(True)  # Re-enable input and button
+                    delattr(dialog, 'user_id')  # Remove user_id to re-prompt
         
         # 使用 asyncio.run() 替代 run_until_complete
         try:
