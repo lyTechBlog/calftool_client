@@ -4,7 +4,7 @@ import json
 import os
 import sys
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from tools.screen_shoot import screen_shot
 from tools.image_tool import image_2_base64
 from PyQt6.QtWidgets import (
@@ -29,12 +29,21 @@ def parse_arguments():
     return args, uri
 
 
-async def send_data(user_id="test", uri=None, window=None):
+async def send_data(user_id="", uri=None, window=None):
     log.info(f"Starting send_data function for user_id: {user_id}")
+    reconnect_start_time = datetime.now()
+    
     while True:
         try:
+            if (datetime.now() - reconnect_start_time) > timedelta(hours=2):
+                log.error("Reconnection attempts exceeded 2 hour limit")
+                window.showMessage("Error", "Connection attempts timed out after 2 hours")
+                window.dialog.updateButtonState(True)
+                return "connection_timeout"
+
             log.info(f"Attempting to connect to server at {uri}")
             async with websockets.connect(uri) as websocket:
+                reconnect_start_time = datetime.now()
                 log.info(f"User {user_id} successfully connected to server")
                 window.showMessage("Success", "Connected to server")
                 
@@ -95,8 +104,8 @@ async def send_data(user_id="test", uri=None, window=None):
             log.error(f"Connection error for user {user_id}: {str(e)}")
             log.info(f"Connection error details: {type(e).__name__}: {str(e)}")
             window.showMessage("Error", f"Connection failed: {str(e)}")
-            log.info(f"Attempting to reconnect in 15 seconds...")
-            await asyncio.sleep(15)
+            log.info(f"Attempting to reconnect in 30 seconds...")
+            await asyncio.sleep(30)
             continue
         except Exception as e:
             log.error(f"Critical error for user {user_id}: {str(e)}")
@@ -153,7 +162,7 @@ class CustomInputDialog(QDialog):
         layout.addWidget(label)
         
         # 添加输入框
-        self.input = QLineEdit("test")
+        self.input = QLineEdit("")
         layout.addWidget(self.input)
         
         # 添加状态标签
@@ -190,14 +199,20 @@ class CustomInputDialog(QDialog):
         self.closeEvent = self.handleClose
     
     def handleClose(self, event):
-        if hasattr(self, 'user_id'):  # 如果已经连接成功
-            event.accept()  # 允许关闭
-            # 在关闭后将应用程序设置为后台模式
-            if sys.platform == 'darwin':
-                import AppKit
-                AppKit.NSApp.setActivationPolicy_(AppKit.NSApplicationActivationPolicyProhibited)
+        # 修改关闭事件处理逻辑
+        reply = QMessageBox.question(
+            self, 
+            '确认', 
+            '确定要退出程序吗？',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            event.accept()
+            # 确保程序完全退出
+            QApplication.quit()
         else:
-            # 如果还未连接，阻止关闭
             event.ignore()
     
     def start_connection(self):
@@ -266,14 +281,17 @@ if __name__ == "__main__":
                     await asyncio.sleep(0.1)
                     app.processEvents()
                 
-                # 连接成功后继续运行
                 result = await send_data(user_id=dialog.user_id, uri=uri, window=window)
                 
-                # Check if the result indicates an invalid user_id
+                # Check results
                 if result == "invalid_user_id":
                     dialog.showError("Invalid user ID. Please try again.")
-                    dialog.updateButtonState(True)  # Re-enable input and button
-                    delattr(dialog, 'user_id')  # Remove user_id to re-prompt
+                    dialog.updateButtonState(True)
+                    delattr(dialog, 'user_id')
+                elif result == "connection_timeout":
+                    dialog.showError("Connection timed out after 2 hours. Please try again.")
+                    dialog.updateButtonState(True)
+                    delattr(dialog, 'user_id')
         
         # 使用 asyncio.run() 替代 run_until_complete
         try:
