@@ -199,21 +199,34 @@ class CustomInputDialog(QDialog):
         self.closeEvent = self.handleClose
     
     def handleClose(self, event):
-        # 修改关闭事件处理逻辑
-        reply = QMessageBox.question(
-            self, 
-            '确认', 
-            '确定要退出程序吗？',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            event.accept()
-            # 确保程序完全退出
-            QApplication.quit()
+        if hasattr(self, 'user_id') and self.status.text() == "Status: 链接成功":
+            # Show notification before minimizing to background
+            QMessageBox.information(
+                self,
+                '提示',
+                '程序将在后台继续运行。\n',
+                QMessageBox.StandardButton.Ok
+            )
+            event.accept()  # Allow close
+            # Set application to background mode
+            if sys.platform == 'darwin':
+                import AppKit
+                AppKit.NSApp.setActivationPolicy_(AppKit.NSApplicationActivationPolicyProhibited)
         else:
-            event.ignore()
+            # Show confirmation dialog before exit
+            reply = QMessageBox.question(
+                self, 
+                '确认退出', 
+                '确定要退出程序吗？',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                event.accept()
+                sys.exit(0)
+            else:
+                event.ignore()
     
     def start_connection(self):
         self.user_id = self.input.text() or "test"
