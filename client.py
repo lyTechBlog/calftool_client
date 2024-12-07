@@ -18,7 +18,7 @@ PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../')
 sys.path.append(f"{PROJECT_DIR}/src")
 from tools.log_module import log
 
-BETA_CODE_FILE = os.path.join(os.path.expanduser("~"), ".beta_code")
+BETA_CODE_FILE = os.path.join(PROJECT_DIR, "beta_code")
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="WebSocket client script")
@@ -184,7 +184,7 @@ class CustomInputDialog(QDialog):
         label = QLabel("第一步：")
         layout.addWidget(label)
         
-        # Add input field
+        # Add input field - modified to always start empty
         self.input = QLineEdit("")
         self.input.setPlaceholderText("请输入内测码")
         self.input.setStyleSheet("QLineEdit::placeholder { color: gray; }")
@@ -198,13 +198,6 @@ class CustomInputDialog(QDialog):
         
         # Connect text change signal
         self.input.textChanged.connect(self.on_input_text_changed)
-        
-        # Load the last beta code if it exists
-        if os.path.exists(BETA_CODE_FILE):
-            with open(BETA_CODE_FILE, 'r', encoding='utf-8') as f:
-                last_beta_code = f.read().strip()
-                self.input.setText(last_beta_code)
-                self.on_input_text_changed(last_beta_code)
         
         # Add error message label
         self.error_label = QLabel("")
@@ -290,10 +283,10 @@ class CustomInputDialog(QDialog):
     def start_connection(self):
         self.user_id = self.input.text() or "test"
         self.updateButtonState(False)
-        self.status.show()  # Show the status label when starting
+        self.status.show()
         self.status.setText("链接服务中...")
-        
-        # Save the beta code to the file
+
+        # Save the beta code to 'conf.txt' in the same directory as 'CalfTool'
         with open(BETA_CODE_FILE, 'w', encoding='utf-8') as f:
             f.write(self.user_id)
     
