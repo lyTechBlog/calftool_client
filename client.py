@@ -17,6 +17,9 @@ from PyQt6.QtCore import QEvent, Qt
 PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../')
 sys.path.append(f"{PROJECT_DIR}/src")
 from tools.log_module import log
+
+BETA_CODE_FILE = os.path.join(os.path.expanduser("~"), ".beta_code")
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="WebSocket client script")
     parser.add_argument('--debug', action='store_true', help="Run in debug mode")
@@ -139,12 +142,14 @@ class MainWindow(QWidget):
                 self.dialog.error_label.setText("")
                 self.dialog.updateButtonState(False)
                 self.dialog.status.repaint()
+                self.dialog.exit_button.setEnabled(True)
             elif title == "Error":
                 self.dialog.status.setText("状态: 连接失败")
                 self.dialog.status.setStyleSheet("color: red")
                 self.dialog.error_label.setText(message)
-                self.dialog.updateButtonState(True)
+                self.dialog.updateButtonState(True)  # 重新启用输入
                 self.dialog.status.repaint()
+                self.dialog.exit_button.setEnabled(False)
             elif title == "Connecting":
                 self.dialog.status.setText("状态: 连接中...")
                 self.dialog.status.setStyleSheet("color: orange")
@@ -155,85 +160,119 @@ class MainWindow(QWidget):
 class CustomInputDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("输入")
+        self.setWindowTitle("远程截图工具")
         layout = QVBoxLayout()
         
-        # 添加提示标签
+        # Define common button style
+        button_style = """
+            QPushButton {
+                background-color: white;
+                border: 1px solid gray;
+                padding: 5px;
+                border-radius: 3px;
+                padding: 5px 10px;
+            }
+            QPushButton:enabled {
+                color: blue;
+            }
+            QPushButton:disabled {
+                color: gray;
+            }
+        """
+        
+        # Add first step label
         label = QLabel("第一步：")
         layout.addWidget(label)
         
-        # 添加输入框并设置占位符和样式
+        # Add input field
         self.input = QLineEdit("")
         self.input.setPlaceholderText("请输入内测码")
         self.input.setStyleSheet("QLineEdit::placeholder { color: gray; }")
         layout.addWidget(self.input)
         
-        # 添加错误消息标签
+        # Add "agree to screen capture permission" button and set style
+        self.permission_button = QPushButton("同意截屏权限")
+        self.permission_button.clicked.connect(self.request_permission)
+        self.permission_button.setEnabled(False)
+        self.permission_button.setStyleSheet(button_style)
+        
+        # Connect text change signal
+        self.input.textChanged.connect(self.on_input_text_changed)
+        
+        # Load the last beta code if it exists
+        if os.path.exists(BETA_CODE_FILE):
+            with open(BETA_CODE_FILE, 'r', encoding='utf-8') as f:
+                last_beta_code = f.read().strip()
+                self.input.setText(last_beta_code)
+                self.on_input_text_changed(last_beta_code)
+        
+        # Add error message label
         self.error_label = QLabel("")
         self.error_label.setStyleSheet("color: red")
         layout.addWidget(self.error_label)
         
-        # 添加第二步提示标签
+        # Add second step label
         step_two_label = QLabel("第二步：")
         layout.addWidget(step_two_label)
         
-        # 添加"同意截屏权限"按钮
-        self.permission_button = QPushButton("同意截屏权限")
-        self.permission_button.clicked.connect(self.request_permission)
+        # Now add the "agree to screen capture permission" button to the layout
         layout.addWidget(self.permission_button)
         
-        # 初始化权限状态标签并隐藏
+        # Initialize permission status label
         self.permission_status = QLabel("截屏权限: 未授权")
         self.permission_status.setStyleSheet("color: orange")
-        self.permission_status.hide()  # 隐藏标签
+        self.permission_status.hide()
         layout.addWidget(self.permission_status)
         
-        # 添加第三步提示标签
+        # Add third step label
         step_three_label = QLabel("第三步：")
         layout.addWidget(step_three_label)
         
-        # 添加开始连接按钮
+        # Add "connect" button and set style
         self.button = QPushButton("连接")
         self.button.clicked.connect(self.start_connection)
-        self.button.setEnabled(False)  # 在权限授予前禁用
+        self.button.setEnabled(False)
+        self.button.setStyleSheet(button_style)
         layout.addWidget(self.button)
         
-        # 状态标签
+        # Status label
         self.status = QLabel("未连接...")
         self.status.setStyleSheet("color: black")
         layout.addWidget(self.status)
-        self.status.hide()  # 初始时隐藏状态标签
+        self.status.hide()
         
-        # 添加第四步提示标签
+        # Add fourth step label
         step_four_label = QLabel("第四步：")
         layout.addWidget(step_four_label)
         
-        # 添加退出按钮，作用相当于点击 "×"
+        # Add "run in background" button and set style
         self.exit_button = QPushButton("后台无痕运行")
         self.exit_button.clicked.connect(self.close)
+        self.exit_button.setEnabled(False)
+        self.exit_button.setStyleSheet(button_style)
         layout.addWidget(self.exit_button)
         
         self.setLayout(layout)
         
-        # 添加关闭事件处理
+        # Add close event handler
         self.closeEvent = self.handleClose
     
     def handleClose(self, event):
         if hasattr(self, 'user_id') and self.status.text() == "状态: 连接成功":
-            # 在最小化到后台前显示提示
+            # Show prompt before minimizing to background
             QMessageBox.information(
                 self,
                 '提示',
                 '程序将在后台继续运行。\n',
                 QMessageBox.StandardButton.Ok
             )
-            event.accept()  # 允许关闭
-            # 设置应用程序为后台模式
+            event.accept()  # Allow closing
+            # Set application to background mode
             if sys.platform == 'darwin':
                 import AppKit
                 AppKit.NSApp.setActivationPolicy_(AppKit.NSApplicationActivationPolicyProhibited)
         else:
-            # 在退出前显示确认对话框
+            # Show confirmation dialog before exiting
             reply = QMessageBox.question(
                 self, 
                 '确认退出', 
@@ -251,8 +290,12 @@ class CustomInputDialog(QDialog):
     def start_connection(self):
         self.user_id = self.input.text() or "test"
         self.updateButtonState(False)
-        self.status.show()  # 连接开始时显示状态标签
+        self.status.show()  # Show the status label when starting
         self.status.setText("链接服务中...")
+        
+        # Save the beta code to the file
+        with open(BETA_CODE_FILE, 'w', encoding='utf-8') as f:
+            f.write(self.user_id)
     
     def updateButtonState(self, enabled):
         """Update the state of input and button"""
@@ -280,15 +323,21 @@ class CustomInputDialog(QDialog):
             
             self.permission_status.setText("截屏权限: 已授权")
             self.permission_status.setStyleSheet("color: green")
-            self.permission_status.show()  # ��示标签
+            self.permission_status.show()  # Show label
             self.button.setEnabled(True)
             self.permission_button.setEnabled(False)
             
         except Exception as e:
             self.permission_status.setText(f"截屏权限错误: {str(e)}")
             self.permission_status.setStyleSheet("color: red")
-            self.permission_status.show()  # 显示标签
+            self.permission_status.show()  # Show label
             self.button.setEnabled(False)
+    
+    def on_input_text_changed(self, text):
+        if text.strip():
+            self.permission_button.setEnabled(True)
+        else:
+            self.permission_button.setEnabled(False)
 
 if __name__ == "__main__":
     args, uri = parse_arguments()
@@ -296,7 +345,7 @@ if __name__ == "__main__":
     
     try:
         app = QApplication(sys.argv)
-        # 初始时设置为常规模式以显示对话框
+        # Set to regular mode initially to show dialog
         if sys.platform == 'darwin':
             import AppKit
             AppKit.NSApp.setActivationPolicy_(AppKit.NSApplicationActivationPolicyRegular)
@@ -310,7 +359,7 @@ if __name__ == "__main__":
         dialog.show()
         log.info("第一步：输入对话框已显示")
         
-        # 修改异步任务以处理对话框关闭后的状态
+        # Modify async task to handle state after dialog close
         async def main():
             while True:
                 while not hasattr(dialog, 'user_id'):
@@ -319,9 +368,9 @@ if __name__ == "__main__":
                 
                 result = await send_data(user_id=dialog.user_id, uri=uri, window=window)
                 
-                # 检查结果
+                # Check result
                 if result == "invalid_user_id":
-                    dialog.showError("用户ID无效，请重试。")
+                    dialog.showError("内测码无效，请重试。")
                     dialog.updateButtonState(True)
                     delattr(dialog, 'user_id')
                 elif result == "connection_timeout":
@@ -329,16 +378,16 @@ if __name__ == "__main__":
                     dialog.updateButtonState(True)
                     delattr(dialog, 'user_id')
         
-        # 使用 asyncio 运行任务
+        # Use asyncio to run task
         try:
-            # 创建新的事件循环
+            # Create new event loop
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
-            # 启动异步任务
+            # Start async task
             future = asyncio.ensure_future(main())
             
-            # 同时运行 Qt 事件循环和 asyncio 事件循环
+            # Run Qt event loop and asyncio event loop concurrently
             while not future.done():
                 app.processEvents()
                 loop.run_until_complete(asyncio.sleep(0.1))
